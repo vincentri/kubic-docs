@@ -1,0 +1,555 @@
+---
+title: "Register Cluster (Local)"
+description: "Set up a local Kubernetes cluster and connect it to Kubic for development and testing"
+---
+
+## Overview
+
+This guide walks you through setting up a local Kubernetes cluster on macOS and connecting it to Kubic. A local cluster is perfect for development and testing without cloud resources.
+
+## Deploy Local Cluster (macOS)
+
+For local development and testing, you can set up a professional-grade Kubernetes environment on your Mac. This provides a full Kubernetes cluster with automatic DNS resolution and SSL certificates, perfect for testing Kubic features without cloud resources.
+
+### What is a Local Cluster and Why Use It?
+
+A local Kubernetes cluster runs entirely on your machine, providing:
+
+- **Development and Testing**: Test Kubic features locally before deploying to production
+- **No Cloud Costs**: Runs entirely on your machine - no AWS or cloud provider charges
+- **Fast Iteration**: Deploy and test applications quickly without waiting for cloud provisioning
+- **Full Kubernetes Experience**: Complete Kubernetes functionality with automatic DNS and SSL
+- **Learning Environment**: Perfect for learning Kubernetes and Kubic workflows
+- **Offline Development**: Work without internet connectivity once set up
+
+### Prerequisites
+
+<Warning>
+**macOS Only**: The `start-local-k8s.sh` script is designed specifically for macOS and requires Homebrew.
+</Warning>
+
+Before running the script, ensure you have:
+
+- **macOS** (any recent version)
+- **Homebrew** installed ([install guide](https://brew.sh))
+- **sudo access** (required for DNS setup - the script will prompt you)
+- **Kubic running** (see [Quickstart](/quickstart) if you haven't started it yet)
+
+The script will automatically install all other required tools if they're missing.
+
+### Dependencies Explained
+
+The script uses several tools to create your local Kubernetes environment. Here's what each one does and how the script automates it:
+
+<AccordionGroup>
+  <Accordion title="Colima - Container Runtime">
+    **What it is**: Lightweight Docker Desktop alternative that runs containers in a Linux VM on macOS.
+    
+    **Why we need it**: Provides the container runtime that Kubernetes requires.
+    
+    **How the script automates it**:
+    - Checks if Colima is installed
+    - Configures a static IP address for network access
+    - Starts Colima with `--network-address` flag to enable network connectivity
+    - Extracts the Colima IP address for DNS configuration
+  </Accordion>
+
+  <Accordion title="Docker CLI - Container Management">
+    **What it is**: Command-line tool for managing containers.
+    
+    **Why we need it**: Required for Colima and k3d to function properly.
+    
+    **How the script automates it**:
+    - Checks if Docker CLI is installed
+    - Installs via Homebrew if missing
+  </Accordion>
+
+  <Accordion title="kubectl - Kubernetes CLI">
+    **What it is**: The official Kubernetes command-line tool for interacting with clusters.
+    
+    **Why we need it**: Used to manage and interact with your Kubernetes cluster.
+    
+    **How the script automates it**:
+    - Checks if kubectl is installed
+    - Installs via Homebrew if missing
+    - Merges kubeconfig automatically
+    - Switches to the correct cluster context
+  </Accordion>
+
+  <Accordion title="k3d - Lightweight Kubernetes">
+    **What it is**: Tool that runs K3s (lightweight Kubernetes) in Docker containers.
+    
+    **Why we need it**: Creates a local Kubernetes cluster quickly and easily.
+    
+    **How the script automates it**:
+    - Checks if k3d is installed
+    - Installs via Homebrew if missing
+    - Checks if cluster already exists
+    - Handles port conflicts intelligently (prompts to delete conflicting clusters)
+    - Creates cluster with HTTP (80) and HTTPS (443) port mappings
+    - Disables default Traefik and ServiceLB (we install our own configured version)
+    - Waits for cluster to be ready before proceeding
+  </Accordion>
+
+  <Accordion title="Helm - Package Manager">
+    **What it is**: The Kubernetes package manager for installing applications.
+    
+    **Why we need it**: Used to install Traefik ingress controller with proper configuration.
+    
+    **How the script automates it**:
+    - Checks if Helm is installed
+    - Installs via Homebrew if missing
+    - Adds Traefik Helm repository automatically
+    - Checks if Traefik is already installed
+    - Installs or upgrades Traefik with proper port configuration
+    - Configures HTTP to HTTPS redirect automatically
+  </Accordion>
+
+  <Accordion title="mkcert - SSL Certificates">
+    **What it is**: Tool for generating locally-trusted SSL certificates.
+    
+    **Why we need it**: Creates SSL certificates that your browser trusts automatically (no security warnings).
+    
+    **How the script automates it**:
+    - Installs mkcert root CA (trusted by your browser)
+    - Generates wildcard certificate for `*.kubic.local` and `kubic.local`
+    - Creates Kubernetes TLS secret `kubic-wildcard-tls` automatically
+    - Handles existing certificates gracefully (reuses if present)
+  </Accordion>
+
+  <Accordion title="dnsmasq - DNS Forwarder">
+    **What it is**: Lightweight DNS server that resolves `*.kubic.local` domains to your Colima IP.
+    
+    **Why we need it**: Enables automatic DNS resolution so you can access apps at `https://app-name.kubic.local` without editing `/etc/hosts`.
+    
+    **How the script automates it**:
+    - Checks if dnsmasq is installed
+    - Installs via Homebrew if missing
+    - Configures dnsmasq to resolve `*.kubic.local` to Colima IP
+    - Creates macOS resolver configuration in `/etc/resolver/kubic.local`
+    - Restarts dnsmasq service
+    - Flushes DNS cache for immediate effect
+  </Accordion>
+
+  <Accordion title="yq - YAML Processor">
+    **What it is**: Command-line YAML processor for editing configuration files.
+    
+    **Why we need it**: Used to configure Colima YAML file for static IP assignment.
+    
+    **How the script automates it**:
+    - Checks if yq is installed
+    - Installs via Homebrew if missing
+    - Modifies Colima configuration to add static IP provision script
+  </Accordion>
+</AccordionGroup>
+
+### Quick Start
+
+Run the setup script:
+
+```bash
+make start-local-k8s
+```
+
+Or run directly:
+
+```bash
+./scripts/start-local-k8s.sh
+```
+
+<Tip>
+**Idempotent Script**: You can run this script multiple times safely. It will detect existing installations and update configurations as needed. This is especially useful if Colima's IP address changes after a restart.
+</Tip>
+
+The script handles everything automatically:
+- Tool installation (if missing)
+- Existing cluster detection
+- Port conflict resolution
+- Configuration updates
+
+### What the Script Automates
+
+Here's a detailed breakdown of what happens when you run the script:
+
+<Steps>
+  <Step title="Install Required Tools">
+    The script checks if each required tool is installed:
+    - Colima, Docker CLI, kubectl, k3d, Helm, mkcert, dnsmasq, yq
+    
+    If any tool is missing, it installs them via Homebrew automatically. You'll see progress messages for each tool.
+  </Step>
+
+  <Step title="Start Colima">
+    The script manages your Colima instance:
+    - Checks if Colima is already running
+    - If running, verifies it has a network address configured
+    - If not running or missing network config, starts Colima with `--network-address` flag
+    - Configures a static IP address for consistent DNS resolution
+    - Extracts the Colima IP address for use in DNS configuration
+    
+    <Info>
+    Colima runs a Linux VM on your Mac. The `--network-address` flag makes it accessible from your host machine, which is required for DNS and port forwarding.
+    </Info>
+  </Step>
+
+  <Step title="Create k3d Cluster">
+    The script creates your Kubernetes cluster:
+    - Checks if a cluster named `kubic` already exists
+    - If exists and running, uses it (updates configuration if needed)
+    - If exists but stopped, starts it
+    - If port 80 is in use, intelligently handles conflicts:
+      - Prompts to delete the existing cluster if it's the same name
+      - Prompts to delete other k3d clusters using port 80
+    - Creates new cluster with:
+      - HTTP port mapping (80:80)
+      - HTTPS port mapping (443:443)
+      - Disabled default Traefik (we install our own)
+      - Disabled ServiceLB (we use Traefik)
+    - Waits for cluster to be ready
+    - Merges kubeconfig and switches to the correct context
+  </Step>
+
+  <Step title="Install and Configure Traefik">
+    The script sets up Traefik ingress controller:
+    - Adds Traefik Helm repository (if not already added)
+    - Checks if Traefik is already installed
+    - If not installed, installs Traefik chart version 38.0.1
+    - If installed, upgrades it with proper configuration
+    - Configures Traefik with:
+      - HTTP port 80 (with hostPort binding)
+      - HTTPS port 443 (with hostPort binding)
+      - Automatic HTTP to HTTPS redirect
+    - Scales down and back up to update hostPort bindings (required for port forwarding)
+  </Step>
+
+  <Step title="Setup Local DNS (dnsmasq)">
+    The script configures DNS resolution:
+    - Configures dnsmasq to resolve `*.kubic.local` to Colima IP
+    - Removes any existing conflicting DNS entries
+    - Creates macOS resolver configuration at `/etc/resolver/kubic.local`
+    - Restarts dnsmasq service
+    - Flushes macOS DNS cache for immediate effect
+    
+    <Info>
+    This step requires sudo access. The script will prompt you for your password.
+    </Info>
+  </Step>
+
+  <Step title="Generate SSL Certificates (mkcert)">
+    The script creates trusted SSL certificates:
+    - Installs mkcert root CA (your browser will trust certificates signed by this CA)
+    - Checks for existing wildcard certificate
+    - Generates new certificate if needed for:
+      - `*.kubic.local` (wildcard for all subdomains)
+      - `kubic.local` (base domain)
+    - Creates Kubernetes TLS secret `kubic-wildcard-tls` in the cluster
+    - Handles existing certificates gracefully (reuses if valid)
+    
+    <Tip>
+    The mkcert root CA is installed in your system's trust store, so browsers will automatically trust certificates generated by mkcert. No security warnings!
+    </Tip>
+  </Step>
+</Steps>
+
+### Troubleshooting Local Cluster Setup
+
+<AccordionGroup>
+  <Accordion title="DNS Not Working">
+    If `*.kubic.local` domains don't resolve:
+    
+    1. Check if dnsmasq is running:
+       ```bash
+       brew services list | grep dnsmasq
+       ```
+    
+    2. Restart dnsmasq:
+       ```bash
+       sudo brew services restart dnsmasq
+       ```
+    
+    3. Verify resolver configuration:
+       ```bash
+       cat /etc/resolver/kubic.local
+       ```
+       Should show: `nameserver 127.0.0.1`
+    
+    4. Flush DNS cache:
+       ```bash
+       sudo dscacheutil -flushcache
+       sudo killall -HUP mDNSResponder
+       ```
+  </Accordion>
+
+  <Accordion title="Colima Issues">
+    If Colima isn't working properly:
+    
+    1. Check Colima status:
+       ```bash
+       colima status
+       ```
+    
+    2. View Colima IP:
+       ```bash
+       colima list
+       ```
+    
+    3. Restart Colima:
+       ```bash
+       colima restart
+       ```
+    
+    4. If IP changed, re-run the script to update DNS:
+       ```bash
+       ./scripts/start-local-k8s.sh
+       ```
+  </Accordion>
+
+  <Accordion title="Cluster Not Accessible">
+    If you can't connect to the cluster:
+    
+    1. Verify cluster is running:
+       ```bash
+       k3d cluster list
+       ```
+       Should show `kubic` with status `running`
+    
+    2. Check kubectl connection:
+       ```bash
+       kubectl cluster-info
+       ```
+    
+    3. Verify kubeconfig:
+       ```bash
+       kubectl config current-context
+       ```
+       Should show `k3d-kubic`
+    
+    4. If cluster is stopped, start it:
+       ```bash
+       k3d cluster start kubic
+       ```
+  </Accordion>
+
+  <Accordion title="Port Conflicts">
+    If port 80 or 443 is already in use:
+    
+    1. Check what's using the port:
+       ```bash
+       lsof -i :80
+       lsof -i :443
+       ```
+    
+    2. If it's another k3d cluster, the script will prompt you to delete it
+    
+    3. If it's another service, stop it or modify the script to use different ports
+    
+    4. Common conflicts:
+       - Apache/Nginx web servers
+       - Other k3d clusters
+       - Docker Desktop with port forwarding
+  </Accordion>
+
+  <Accordion title="SSL Certificate Issues">
+    If you see SSL warnings:
+    
+    1. Verify mkcert root CA is installed:
+       ```bash
+       mkcert -install
+       ```
+    
+    2. Check if certificate exists:
+       ```bash
+       ls -la /tmp/_wildcard.kubic.local*.pem
+       ```
+    
+    3. Verify Kubernetes secret exists:
+       ```bash
+       kubectl get secret kubic-wildcard-tls
+       ```
+    
+    4. If secret is missing, re-run the script or manually create it:
+       ```bash
+       kubectl create secret tls kubic-wildcard-tls \
+         --cert=/tmp/_wildcard.kubic.local*.pem \
+         --key=/tmp/_wildcard.kubic.local*-key.pem
+       ```
+  </Accordion>
+</AccordionGroup>
+
+## Register the Cluster in Kubic
+
+After the script completes, register your local cluster in Kubic to start managing applications. Verify your cluster is running:
+
+```bash
+k3d cluster list
+```
+
+You should see `kubic` with status `running`.
+
+Follow these steps to register your local cluster in Kubic:
+
+<Steps>
+  <Step title="Get Your Kubeconfig">
+    Run this command to get your cluster's kubeconfig:
+    
+    ```bash
+    k3d kubeconfig get kubic
+    ```
+    
+    Copy the entire output (it's your kubeconfig YAML).
+    
+    <Tip>
+    The kubeconfig contains authentication credentials for your cluster. Keep it secure and don't share it publicly.
+    </Tip>
+  </Step>
+
+  <Step title="Open Kubic Dashboard">
+    Navigate to your Kubic dashboard:
+    
+    - **Local Development**: [http://localhost:3000](http://localhost:3000)
+    
+    Make sure Kubic is running (see [Quickstart](/quickstart) for Docker Compose setup).
+  </Step>
+
+  <Step title="Add Cluster">
+    1. Go to **Clusters** → **Add Cluster** in the Kubic dashboard
+    2. Select the **"Manual Registration"** tab
+    3. Enter cluster name: `kubic` (or any name you prefer)
+    4. Paste the kubeconfig content you copied in step 1
+    5. Click **"Register Cluster"**
+  </Step>
+
+  <Step title="Verify Registration">
+    After registration, your local cluster should appear in the Clusters list with status "Ready".
+    
+    You can now:
+    - View cluster details
+    - Create namespaces
+    - Deploy applications
+    - Manage resources
+  </Step>
+</Steps>
+
+<Info>
+**Cluster Name**: You can use any name you prefer. The name `kubic` is just a convention from the setup script. The cluster name in Kubic doesn't need to match the k3d cluster name.
+</Info>
+
+## Using the `.kubic.local` Domain
+
+Once your cluster is registered, you can deploy applications and access them using the `.kubic.local` domain:
+
+### Automatic DNS Resolution
+
+Applications deployed to your local cluster can be accessed at:
+```
+https://<app-name>.kubic.local
+```
+
+### Features
+
+- **Automatic DNS**: No need to edit `/etc/hosts` file - DNS resolution is automatic
+- **SSL Certificates**: All certificates are automatically trusted by your browser (no security warnings)
+- **Wildcard Support**: Any subdomain under `.kubic.local` will resolve automatically
+- **HTTPS by Default**: All traffic is automatically redirected to HTTPS
+
+### Example
+
+If you deploy an application named `my-app` to your local cluster, it will be accessible at:
+
+```
+https://my-app.kubic.local
+```
+
+The DNS and SSL certificates are automatically configured by the `start-local-k8s.sh` script, so everything "just works" out of the box.
+
+### How It Works
+
+1. **DNS**: The `dnsmasq` service resolves `*.kubic.local` domains to your Colima IP address
+2. **SSL**: The `mkcert` tool generates trusted certificates for `*.kubic.local` domains
+3. **Traefik**: The ingress controller handles routing and SSL termination automatically
+
+## Troubleshooting
+
+### Cluster Not Appearing After Registration
+
+If your cluster doesn't appear or shows an error:
+
+1. **Verify cluster is running**:
+   ```bash
+   k3d cluster list
+   kubectl cluster-info
+   ```
+
+2. **Check kubeconfig is valid**:
+   ```bash
+   kubectl get nodes
+   ```
+   Should show your cluster nodes.
+
+3. **Verify Kubic can connect**:
+   - Check Kubic backend logs for connection errors
+   - Ensure the kubeconfig you pasted is complete and valid
+
+### DNS Not Working for Applications
+
+If `*.kubic.local` domains don't resolve:
+
+1. **Check dnsmasq is running**:
+   ```bash
+   brew services list | grep dnsmasq
+   ```
+
+2. **Restart dnsmasq**:
+   ```bash
+   sudo brew services restart dnsmasq
+   ```
+
+3. **Flush DNS cache**:
+   ```bash
+   sudo dscacheutil -flushcache
+   sudo killall -HUP mDNSResponder
+   ```
+
+See the Troubleshooting section above for more details.
+
+### SSL Certificate Warnings
+
+If you see SSL warnings in your browser:
+
+1. **Verify mkcert root CA is installed**:
+   ```bash
+   mkcert -install
+   ```
+
+2. **Check Kubernetes TLS secret exists**:
+   ```bash
+   kubectl get secret kubic-wildcard-tls
+   ```
+
+3. **Re-run the setup script** if needed:
+   ```bash
+   ./scripts/start-local-k8s.sh
+   ```
+
+## Next Steps
+
+Now that your local cluster is registered:
+
+<CardGroup cols={2}>
+  <Card title="Deploy an Application" icon="rocket" href="/api-reference/introduction">
+    Deploy your first application from a template
+  </Card>
+
+  <Card title="Create a Namespace" icon="folder" href="/api-reference/introduction">
+    Organize your applications with namespaces
+  </Card>
+
+  <Card title="Explore the API" icon="terminal" href="/api-reference/introduction">
+    Check out the Swagger documentation
+  </Card>
+
+  <Card title="Development Guide" icon="code" href="/development">
+    Learn how to develop and contribute
+  </Card>
+</CardGroup>
+

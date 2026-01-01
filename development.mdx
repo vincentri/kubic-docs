@@ -1,94 +1,450 @@
 ---
 title: 'Development'
-description: 'Preview changes locally to update your docs'
+description: 'Guide for developing Kubic locally with hot reload and code generation'
 ---
 
+## Prerequisites
+
+Before you begin development, ensure you have:
+
+- **Go** 1.22 or later
+- **Node.js** 19 or higher
+- **pnpm** (package manager for frontend)
+- **PostgreSQL** 14+ (or Docker to run it)
+- **Redis** (optional, for background worker)
+- **Docker** (optional, for running PostgreSQL/Redis)
+
 <Info>
-  **Prerequisites**:
-  - Node.js version 19 or higher
-  - A docs repository with a `docs.json` file
+**Package Manager**: The frontend uses `pnpm` exclusively. Never use `npm` for frontend operations.
 </Info>
 
-Follow these steps to install and run Mintlify on your operating system.
+## Initial Setup
 
-<Steps>
-<Step title="Install the Mintlify CLI">
+### 1. Install Dependencies
 
-```bash
-npm i -g mint
-```
-</Step>
-
-<Step title="Preview locally">
-
-Navigate to your docs directory where your `docs.json` file is located, and run the following command:
+Install all dependencies for both backend and frontend:
 
 ```bash
-mint dev
+make install
 ```
 
-A local preview of your documentation will be available at `http://localhost:3000`.
+This will:
+- Download Go modules
+- Install Go tools (Air, Swagger, golangci-lint, etc.)
+- Install frontend dependencies via pnpm
 
-</Step>
-</Steps>
+### 2. Database Setup
 
-## Custom ports
+You need PostgreSQL running. You can either use Docker Compose (from [Quickstart](/quickstart)) or run PostgreSQL manually:
 
-By default, Mintlify uses port 3000. You can customize the port Mintlify runs on by using the `--port` flag. For example, to run Mintlify on port 3333, use this command:
+**Option A: Using Docker Compose** (Recommended)
+```bash
+cd docker
+docker compose up -d postgres redis
+```
+
+**Option B: Manual PostgreSQL**
+```bash
+docker run -d \
+  --name kubic-postgres \
+  -e POSTGRES_DB=kubic \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -p 5432:5432 \
+  postgres:16
+```
+
+**Option C: Manual Redis** (for background worker)
+```bash
+docker run -d \
+  --name kubic-redis \
+  -p 6379:6379 \
+  redis:7-alpine
+```
+
+### 3. Environment Variables
+
+Create a `.env` file in the project root (see [Quickstart](/quickstart) for details):
 
 ```bash
-mint dev --port 3333
+# Database
+DB_HOST=localhost
+DB_PORT=5432
+DB_USER=postgres
+DB_PASSWORD=postgres
+DB_NAME=kubic
+DB_SSLMODE=disable
+
+# Server
+PORT=8080
+
+# Redis (optional)
+REDIS_HOST=localhost
+REDIS_PORT=6379
+REDIS_PASSWORD=
+REDIS_DB=0
+
+# Encryption Key (32 bytes)
+ENCRYPTION_KEY=12345678901234567890123456789012
+
+# Frontend
+NEXT_PUBLIC_API_URL=http://localhost:8080
 ```
 
-If you attempt to run Mintlify on a port that's already in use, it will use the next available port:
-
-```md
-Port 3000 is already in use. Trying 3001 instead.
-```
-
-## Mintlify versions
-
-Please note that each CLI release is associated with a specific version of Mintlify. If your local preview does not align with the production version, please update the CLI:
+### 4. Run Database Migrations
 
 ```bash
-npm mint update
+make migrate
 ```
 
-## Validating links
+### 5. Seed Database (Optional)
 
-The CLI can assist with validating links in your documentation. To identify any broken links, use the following command:
+Populate the database with application templates:
 
 ```bash
-mint broken-links
+make seed
 ```
 
-## Deployment
+## Development Workflow
 
-If the deployment is successful, you should see the following:
+### Running Development Servers
 
-<Frame>
-  <img src="/images/checks-passed.png" alt="Screenshot of a deployment confirmation message that says All checks have passed." style={{ borderRadius: '0.5rem' }} />
-</Frame>
+You have several options for running the development environment:
 
-## Code formatting
+<AccordionGroup>
+  <Accordion title="Run Both Backend and Frontend">
+    Run both services with hot reload in a single command:
+    
+    ```bash
+    make dev
+    ```
+    
+    This starts:
+    - Backend API on `http://localhost:8080` (with Air hot reload)
+    - Frontend dashboard on `http://localhost:3000` (with Next.js hot reload)
+    
+    <Tip>
+    Press `Ctrl+C` to stop both services. The Makefile handles cleanup automatically.
+    </Tip>
+  </Accordion>
 
-We suggest using extensions on your IDE to recognize and format MDX. If you're a VSCode user, consider the [MDX VSCode extension](https://marketplace.visualstudio.com/items?itemName=unifiedjs.vscode-mdx) for syntax highlighting, and [Prettier](https://marketplace.visualstudio.com/items?itemName=esbenp.prettier-vscode) for code formatting.
+  <Accordion title="Run Backend Only">
+    Start only the backend API server:
+    
+    ```bash
+    make dev-backend
+    ```
+    
+    The backend uses [Air](https://github.com/cosmtrek/air) for hot reload. Changes to Go files will automatically restart the server.
+    
+    Access:
+    - API: `http://localhost:8080`
+    - Swagger: `http://localhost:8080/swagger/index.html`
+  </Accordion>
+
+  <Accordion title="Run Frontend Only">
+    Start only the frontend dashboard:
+    
+    ```bash
+    make dev-frontend
+    ```
+    
+    The frontend uses Next.js hot reload. Changes to React/TypeScript files will automatically refresh the browser.
+    
+    Access: `http://localhost:3000`
+    
+    <Warning>
+    Make sure the backend is running separately if you're testing API calls.
+    </Warning>
+  </Accordion>
+
+  <Accordion title="Run Background Worker">
+    Start the background worker for async jobs (deployments, image validation, etc.):
+    
+    ```bash
+    make dev-worker
+    ```
+    
+    <Info>
+    The worker doesn't have hot reload. Restart manually after code changes.
+    </Info>
+  </Accordion>
+</AccordionGroup>
+
+### Stop Development Services
+
+Stop all running development services:
+
+```bash
+make dev-stop
+```
+
+## Code Generation
+
+### Generate Swagger Documentation
+
+After updating API endpoints with Swagger annotations, generate the documentation:
+
+```bash
+make swagger
+```
+
+Swagger docs will be available at `http://localhost:8080/swagger/index.html`
+
+### Generate TypeScript SDK
+
+Generate both Swagger docs and TypeScript SDK (recommended):
+
+```bash
+make generate
+```
+
+This will:
+1. Generate Swagger documentation
+2. Generate TypeScript SDK from Swagger spec
+3. Run deadcode verification
+
+The TypeScript SDK will be available at `dashboard/src/generated/api/`
+
+<Tip>
+**Always run `make generate`** after adding or modifying API endpoints to keep the frontend SDK in sync.
+</Tip>
+
+## Code Quality
+
+### Run All Verification Checks
+
+Run all code quality checks before committing:
+
+```bash
+make verify
+```
+
+This runs:
+- Backend compilation check
+- Backend linting (golangci-lint)
+- Dead code detection
+- Frontend TypeScript type checking
+- Frontend build verification
+- Frontend linting
+
+### Individual Checks
+
+You can also run checks individually:
+
+**Backend:**
+```bash
+# Format code
+go fmt ./...
+
+# Check for issues
+go vet ./...
+
+# Run linter
+make lint
+
+# Check for dead code
+make deadcode
+
+# Verify compilation
+make check-build
+```
+
+**Frontend:**
+```bash
+cd dashboard
+
+# Type check
+make check-frontend-types
+# or: pnpm exec tsc --noEmit
+
+# Build verification
+make check-frontend-build
+# or: pnpm build
+
+# Linting
+make check-frontend-lint
+# or: pnpm lint
+```
+
+## Project Structure
+
+Understanding the project structure helps with development:
+
+```
+kubic/
+├── cmd/
+│   ├── server/          # Backend API entry point
+│   ├── worker/          # Background worker entry point
+│   ├── migrate/         # Database migrations
+│   └── seed/            # Database seeders
+├── internal/
+│   ├── api/             # HTTP handlers (Gin)
+│   ├── service/         # Business logic layer
+│   ├── db/              # Database models & migrations
+│   ├── k8s/             # Kubernetes client operations
+│   └── constants/       # Backend constants
+├── dashboard/           # Frontend (Next.js)
+│   ├── src/
+│   │   ├── app/         # Next.js App Router pages
+│   │   ├── components/  # React components
+│   │   ├── lib/         # Utilities & API client
+│   │   └── generated/   # Auto-generated TypeScript SDK
+│   └── package.json
+└── charts/              # Helm charts for applications
+```
+
+## Development Guidelines
+
+### Backend Development
+
+- **Architecture**: Follow clean architecture (Handler → Service → Repository)
+- **File Size**: Keep handlers < 400 lines, services < 500 lines
+- **Complexity**: Keep cyclomatic complexity < 15, cognitive complexity < 20
+- **Error Handling**: Always wrap errors with context using `%w`
+- **Context**: Always pass `context.Context` as first parameter
+
+See [Backend Guidelines](/agents#backend-internal) for detailed best practices.
+
+### Frontend Development
+
+- **Package Manager**: Always use `pnpm`, never `npm`
+- **Components**: Keep components < 300 lines
+- **State Management**: Use Zustand for global state, React Query for server state
+- **Error Handling**: Always use `getErrorMessage()` utility
+- **TypeScript**: Never use `any`, always define proper types
+
+See [Frontend Guidelines](/agents#frontend-dashboard) for detailed best practices.
+
+## Testing API Endpoints
+
+### Using Swagger UI
+
+1. Start the backend: `make dev-backend`
+2. Open Swagger docs: `http://localhost:8080/swagger/index.html`
+3. Test endpoints directly from the browser
+
+### Using curl
+
+Example: Register a cluster
+
+```bash
+curl -X POST http://localhost:8080/api/clusters \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "dev-cluster",
+    "kubeconfig": "YOUR_KUBECONFIG_CONTENT_HERE"
+  }'
+```
+
+### Using Postman
+
+1. Export Swagger JSON from `http://localhost:8080/swagger/doc.json`
+2. Import into Postman
+3. Test endpoints with proper authentication
+
+## Monitoring Background Jobs
+
+If you're running the background worker, you can monitor queues and tasks:
+
+```bash
+make asynqmon
+```
+
+This starts the Asynq monitoring UI (usually at `http://localhost:8080` or similar).
+
+## Common Development Tasks
+
+<AccordionGroup>
+  <Accordion title="Add a New API Endpoint">
+    1. Add handler in `internal/api/`
+    2. Add service logic in `internal/service/`
+    3. Add Swagger annotations
+    4. Run `make generate` to update Swagger and TypeScript SDK
+    5. Test endpoint in Swagger UI
+  </Accordion>
+
+  <Accordion title="Add a New Frontend Page">
+    1. Create page in `dashboard/src/app/`
+    2. Create components in `dashboard/src/components/`
+    3. Use generated API SDK from `dashboard/src/generated/api/`
+    4. Test with hot reload
+  </Accordion>
+
+  <Accordion title="Update Database Schema">
+    1. Modify models in `internal/db/models.go`
+    2. Create migration: `go run cmd/migrate/main.go` (or use Alembic-style migrations)
+    3. Update seeders if needed
+    4. Run `make migrate` to apply changes
+  </Accordion>
+
+  <Accordion title="Add a New Application Template">
+    1. Create Helm chart in `charts/`
+    2. Add seeder in `internal/db/seeders/`
+    3. Run `make seed` to populate database
+    4. Test deployment via UI
+  </Accordion>
+</AccordionGroup>
 
 ## Troubleshooting
 
 <AccordionGroup>
-  <Accordion title='Error: Could not load the "sharp" module using the darwin-arm64 runtime'>
-
-    This may be due to an outdated version of node. Try the following:
-    1. Remove the currently-installed version of the CLI: `npm remove -g mint`
-    2. Upgrade to Node v19 or higher.
-    3. Reinstall the CLI: `npm i -g mint`
+  <Accordion title="Backend won't start">
+    - Check PostgreSQL is running: `docker ps | grep postgres`
+    - Verify `.env` file has correct database credentials
+    - Check logs: Look for connection errors
+    - Verify port 8080 is not in use: `lsof -i :8080`
   </Accordion>
 
-  <Accordion title="Issue: Encountering an unknown error">
-  
-    Solution: Go to the root of your device and delete the `~/.mintlify` folder. Then run `mint dev` again.
+  <Accordion title="Frontend won't start">
+    - Check Node.js version: `node --version` (should be 19+)
+    - Verify pnpm is installed: `pnpm --version`
+    - Clear node_modules and reinstall: `cd dashboard && rm -rf node_modules && pnpm install`
+    - Check port 3000 is not in use: `lsof -i :3000`
+  </Accordion>
+
+  <Accordion title="Hot reload not working">
+    **Backend:**
+    - Verify Air is installed: `air --version`
+    - Check `.air.toml` configuration exists
+    - Restart: `make dev-stop && make dev-backend`
+    
+    **Frontend:**
+    - Check Next.js dev server is running
+    - Clear `.next` cache: `cd dashboard && rm -rf .next`
+    - Restart: `make dev-stop && make dev-frontend`
+  </Accordion>
+
+  <Accordion title="TypeScript SDK out of sync">
+    - Run `make generate` to regenerate Swagger and SDK
+    - Restart frontend dev server
+    - Check `dashboard/src/generated/api/` exists and has latest files
+  </Accordion>
+
+  <Accordion title="Database connection errors">
+    - Verify PostgreSQL is running: `docker ps | grep postgres`
+    - Check connection string in `.env`
+    - Test connection: `psql -h localhost -U postgres -d kubic`
+    - Verify migrations ran: `make migrate`
   </Accordion>
 </AccordionGroup>
 
-Curious about what changed in the latest CLI version? Check out the [CLI changelog](https://www.npmjs.com/package/mintlify?activeTab=versions).
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Backend Guidelines" icon="code" href="/agents#backend-internal">
+    Learn backend development best practices
+  </Card>
+
+  <Card title="Frontend Guidelines" icon="layout" href="/agents#frontend-dashboard">
+    Learn frontend development best practices
+  </Card>
+
+  <Card title="API Reference" icon="terminal" href="/api-reference/introduction">
+    Explore the API documentation
+  </Card>
+
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Set up Kubic with Docker Compose
+  </Card>
+</CardGroup>

@@ -1,0 +1,419 @@
+---
+title: "Register Cluster (AWS)"
+description: "Provision a new Kubernetes cluster on AWS EC2 with automatic K3s installation"
+---
+
+## Overview
+
+Kubic can automatically provision Kubernetes clusters on AWS EC2. This creates a fully configured K3s cluster with automatic HTTPS, Elastic IPs, and cost optimization features.
+
+<Info>
+**What gets created**: EC2 instance, Elastic IP, Security Group, IAM roles, SSH key pair, and K3s installation - all automatically configured.
+</Info>
+
+## Prerequisites
+
+Before provisioning an AWS cluster, ensure you have:
+
+- **AWS Account** with appropriate permissions
+- **AWS Credentials** configured (see [AWS Configuration](#aws-configuration))
+- **IAM Permissions** (see [Required IAM Permissions](#required-iam-permissions))
+- **Kubic Running** (see [Quickstart](/quickstart))
+
+## AWS Configuration
+
+Kubic needs AWS credentials to provision and manage clusters. Configure them in your `.env` file:
+
+```bash
+# AWS Configuration (required for AWS cluster provisioning)
+AWS_REGION=us-east-1                    # AWS region for EC2 instances
+AWS_ACCESS_KEY_ID=your-access-key-id   # AWS access key ID
+AWS_SECRET_ACCESS_KEY=your-secret-key  # AWS secret access key
+```
+
+### Alternative: AWS Profile
+
+If you're using AWS CLI with profiles, you can set:
+
+```bash
+AWS_PROFILE=my-profile
+```
+
+The backend will use the default AWS credentials chain, which includes:
+1. Environment variables (`AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`)
+2. AWS credentials file (`~/.aws/credentials`)
+3. IAM role (if running on EC2)
+
+<Tip>
+**Security Best Practice**: Use IAM roles when running Kubic on AWS infrastructure, or use AWS profiles for local development.
+</Tip>
+
+## Required IAM Permissions
+
+Your AWS IAM user or role needs specific permissions to provision and manage clusters. Here's the required IAM policy:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ec2:RunInstances",
+        "ec2:TerminateInstances",
+        "ec2:DescribeInstances",
+        "ec2:CreateSecurityGroup",
+        "ec2:DeleteSecurityGroup",
+        "ec2:AuthorizeSecurityGroupIngress",
+        "ec2:DescribeSecurityGroups",
+        "ec2:CreateKeyPair",
+        "ec2:DeleteKeyPair",
+        "ec2:ImportKeyPair",
+        "ec2:DescribeKeyPairs",
+        "ec2:AllocateAddress",
+        "ec2:ReleaseAddress",
+        "ec2:AssociateAddress",
+        "ec2:DisassociateAddress",
+        "ec2:DescribeAddresses",
+        "ec2:CreateVolume",
+        "ec2:DeleteVolume",
+        "ec2:AttachVolume",
+        "ec2:DetachVolume",
+        "ec2:ModifyVolume",
+        "ec2:DescribeVolumes",
+        "ec2:DescribeVolumesModifications",
+        "ec2:CreateSnapshot",
+        "ec2:DeleteSnapshot",
+        "ec2:DescribeSnapshots",
+        "ec2:DescribeImages",
+        "ec2:DescribeRegions",
+        "ec2:CreateTags",
+        "ec2:StopInstances",
+        "ec2:StartInstances",
+        "iam:CreateRole",
+        "iam:DeleteRole",
+        "iam:AttachRolePolicy",
+        "iam:DetachRolePolicy",
+        "iam:PutRolePolicy",
+        "iam:DeleteRolePolicy",
+        "iam:GetRole",
+        "iam:ListRolePolicies",
+        "iam:CreateInstanceProfile",
+        "iam:DeleteInstanceProfile",
+        "iam:AddRoleToInstanceProfile",
+        "iam:RemoveRoleFromInstanceProfile",
+        "iam:GetInstanceProfile",
+        "iam:ListInstanceProfilesForRole",
+        "iam:TagRole",
+        "iam:TagInstanceProfile",
+        "iam:ListRoles"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+### Quick Setup Options
+
+**Option 1: Use AWS Managed Policy (Testing)**
+- Attach `AmazonEC2FullAccess` policy to your IAM user/role
+- Quick but provides broader permissions than needed
+
+**Option 2: Create Custom Policy (Recommended)**
+1. Go to AWS IAM Console → Policies → Create Policy
+2. Click JSON tab and paste the policy above
+3. Name it "KubicClusterManagement" and create
+4. Attach the policy to your IAM user or role
+
+## Provision a Cluster
+
+Follow these steps to provision a new AWS cluster:
+
+<Steps>
+  <Step title="Open Kubic Dashboard">
+    Navigate to your Kubic dashboard:
+    
+    - **Local Development**: [http://localhost:3000](http://localhost:3000)
+    
+    Make sure Kubic is running (see [Quickstart](/quickstart) if you haven't started it yet).
+  </Step>
+
+  <Step title="Start Provisioning">
+    1. Go to **Clusters** → **Add Cluster** in the Kubic dashboard
+    2. Select the **"Provision on AWS"** tab
+    3. Fill in the provisioning form:
+       - **Cluster Name**: Choose a unique name (e.g., `production-cluster`)
+       - **Instance Type**: Select EC2 instance type (see [Instance Types](#instance-types))
+       - **Root Volume Size**: Set disk size in GB (minimum 20GB)
+    4. Review the IAM permissions accordion if needed
+    5. Click **"Provision Cluster"**
+  </Step>
+
+  <Step title="Wait for Provisioning">
+    Provisioning takes 5-10 minutes. The process includes:
+    
+    - Launching EC2 instance
+    - Allocating Elastic IP (static IP)
+    - Installing K3s automatically
+    - Configuring security groups (ports 22, 80, 443, 6443)
+    - Setting up IAM roles for EBS/EFS CSI drivers
+    - Installing storage drivers
+    - Saving kubeconfig to Kubic
+    
+    <Info>
+    You can monitor the provisioning status in the cluster details page. The status will change from "Pending" → "Provisioning" → "Ready".
+    </Info>
+  </Step>
+
+  <Step title="Verify Cluster">
+    Once provisioning completes, your cluster will appear in the Clusters list with status "Ready".
+    
+    You can now:
+    - View cluster details (public IP, instance type, etc.)
+    - Create namespaces
+    - Deploy applications
+    - Download SSH private key for direct access
+  </Step>
+</Steps>
+
+## Instance Types
+
+Choose an instance type based on your workload:
+
+| Instance Type | vCPU | RAM | Approx. Cost/hr | Best For |
+|--------------|------|-----|----------------|----------|
+| t3.small | 2 | 2GB | $0.0208 | Development, testing |
+| t3.medium | 2 | 4GB | $0.0416 | Small applications |
+| t3.large | 2 | 8GB | $0.0832 | Medium workloads |
+| t3.xlarge | 4 | 16GB | $0.1664 | Large applications |
+
+<Warning>
+**AWS Charges Apply**: You will be charged for EC2 instance usage, EBS storage, and Elastic IPs. See [Cost Optimization](#cost-optimization) for ways to reduce costs.
+</Warning>
+
+## What Gets Created Automatically
+
+When you provision a cluster, Kubic automatically creates and configures:
+
+### AWS Resources
+
+- **EC2 Instance**: Ubuntu-based instance with K3s pre-installed
+- **Elastic IP**: Static IP address that persists across stop/start cycles
+- **Security Group**: Configured with ports:
+  - 22 (SSH)
+  - 80 (HTTP)
+  - 443 (HTTPS)
+  - 6443 (Kubernetes API)
+- **Key Pair**: SSH key pair for cluster access
+- **IAM Role**: For EBS and EFS CSI drivers
+- **IAM Instance Profile**: Attached to EC2 instance
+- **EBS Volume**: Root volume (expandable)
+
+### Kubernetes Resources
+
+- **K3s Installation**: Lightweight Kubernetes distribution
+- **Storage Drivers**: EBS and EFS CSI drivers installed automatically
+- **Storage Classes**: Pre-configured storage classes for EBS and EFS
+- **Kubeconfig**: Automatically saved to Kubic database
+
+## Cost Optimization
+
+AWS clusters support stop/start functionality to save costs:
+
+### Stop a Cluster
+
+When you stop a cluster:
+- EC2 instance is stopped (no compute charges)
+- Elastic IP is retained (no charge for allocated Elastic IPs)
+- EBS volume persists (you pay for storage only)
+- Cluster state is preserved
+
+**Estimated Savings**: Stop clusters when not in use to save ~90% of costs (only pay for EBS storage).
+
+### Start a Stopped Cluster
+
+When you start a stopped cluster:
+- EC2 instance restarts (2-3 minutes)
+- Elastic IP reattaches automatically
+- All data and configurations are preserved
+- Cluster becomes ready for use
+
+### How to Stop/Start
+
+1. Go to cluster details page
+2. Click **"Stop Cluster"** or **"Start Cluster"** button
+3. Wait for status to change (stopping/starting → stopped/ready)
+
+<Info>
+**Status Flow**: `Ready` → `Stopping` → `Stopped` → `Starting` → `Ready`
+</Info>
+
+## SSH Access
+
+You can download the SSH private key to access your cluster directly:
+
+<Steps>
+  <Step title="Download SSH Key">
+    1. Go to cluster details page
+    2. Click **"Download SSH Key"** button
+    3. Save the private key file securely
+  </Step>
+
+  <Step title="Connect via SSH">
+    Use the downloaded key to connect:
+    
+    ```bash
+    ssh -i /path/to/key.pem ubuntu@<cluster-public-ip>
+    ```
+    
+    Replace `<cluster-public-ip>` with your cluster's public IP address.
+  </Step>
+</Steps>
+
+<Warning>
+**Security**: Keep your SSH private key secure. Never share it publicly or commit it to version control.
+</Warning>
+
+## Storage Expansion
+
+You can expand the root EBS volume after provisioning:
+
+1. Go to cluster details page
+2. Navigate to **Storage** tab
+3. Click **"Expand Root Volume"**
+4. Enter new size (must be larger than current size)
+5. Wait for expansion to complete (may take a few minutes)
+
+<Info>
+**Limitation**: You can only increase storage size, not decrease it. Plan your initial size accordingly.
+</Info>
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="Provisioning Failed">
+    If provisioning fails:
+    
+    1. **Check AWS Credentials**:
+       - Verify `AWS_ACCESS_KEY_ID` and `AWS_SECRET_ACCESS_KEY` in `.env`
+       - Test credentials: `aws sts get-caller-identity`
+    
+    2. **Check IAM Permissions**:
+       - Verify IAM policy is attached
+       - Check CloudTrail logs for permission errors
+    
+    3. **Check AWS Region**:
+       - Ensure `AWS_REGION` is set correctly
+       - Verify region supports EC2 instances
+    
+    4. **Check Cluster Status**:
+       - View cluster details for error messages
+       - Check backend logs for detailed errors
+  </Accordion>
+
+  <Accordion title="Provisioning Stuck">
+    If provisioning is stuck in "Provisioning" status:
+    
+    1. **Check AWS Console**:
+       - Verify EC2 instance is launching
+       - Check instance status and logs
+    
+    2. **Check Backend Logs**:
+       - Look for worker job errors
+       - Verify Redis/worker is running
+    
+    3. **Manual Cleanup**:
+       - If provisioning failed, delete the cluster
+       - AWS resources will be cleaned up automatically
+  </Accordion>
+
+  <Accordion title="Cannot Connect to Cluster">
+    If you can't connect after provisioning:
+    
+    1. **Verify Cluster Status**:
+       - Ensure status is "Ready"
+       - Check public IP is assigned
+    
+    2. **Check Security Group**:
+       - Verify ports 22, 80, 443, 6443 are open
+       - Check source IP restrictions
+    
+    3. **Test Connectivity**:
+       ```bash
+       # Test SSH
+       ssh -i key.pem ubuntu@<public-ip>
+       
+       # Test Kubernetes API
+       curl -k https://<public-ip>:6443
+       ```
+  </Accordion>
+
+  <Accordion title="AWS Validation Failed">
+    If you see "AWS validation failed" error:
+    
+    1. **Check Credentials**:
+       ```bash
+       aws sts get-caller-identity
+       ```
+       Should return your AWS account details.
+    
+    2. **Check Permissions**:
+       - Verify IAM policy is attached
+       - Test EC2 permissions: `aws ec2 describe-instances`
+    
+    3. **Check Region**:
+       - Verify `AWS_REGION` matches your credentials region
+       - Some regions may have different service availability
+  </Accordion>
+
+  <Accordion title="Stop/Start Not Working">
+    If stop/start operations fail:
+    
+    1. **Check Instance State**:
+       - Verify instance exists in AWS Console
+       - Check for any AWS service issues
+    
+    2. **Check IAM Permissions**:
+       - Ensure `ec2:StopInstances` and `ec2:StartInstances` permissions
+    
+    3. **Check Backend Logs**:
+       - Look for lifecycle job errors
+       - Verify worker is processing jobs
+  </Accordion>
+</AccordionGroup>
+
+## Cluster Status Flow
+
+Understanding cluster status helps with troubleshooting:
+
+1. **Pending**: Initial state when provisioning starts
+2. **Provisioning**: EC2 launching, K3s installing (5-10 minutes)
+3. **Ready**: Cluster is running and accessible
+4. **Stopping**: EC2 instance is stopping (1-2 minutes)
+5. **Stopped**: Instance stopped (no compute charges)
+6. **Starting**: EC2 restarting after stop (2-3 minutes)
+7. **Failed**: Provisioning or operation failed
+
+## Next Steps
+
+After provisioning your AWS cluster:
+
+<CardGroup cols={2}>
+  <Card title="Create a Namespace" icon="folder" href="/api-reference/introduction">
+    Organize your applications with namespaces
+  </Card>
+
+  <Card title="Deploy an Application" icon="rocket" href="/api-reference/introduction">
+    Deploy your first application from a template
+  </Card>
+
+  <Card title="Enable Domain Support" icon="globe" href="/api-reference/introduction">
+    Set up automatic HTTPS with Let's Encrypt
+  </Card>
+
+  <Card title="Development Guide" icon="code" href="/development">
+    Learn how to develop and contribute
+  </Card>
+</CardGroup>
+

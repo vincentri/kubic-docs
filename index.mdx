@@ -1,97 +1,129 @@
 ---
 title: "Introduction"
-description: "Welcome to the new home for your documentation"
+description: "Kubic - Kubernetes management platform for multi-cluster operations, template-driven deployments, and cost optimization"
 ---
 
-## Setting up
+## What is Kubic?
 
-Get your documentation site up and running in minutes.
+Kubic is an open-source Kubernetes management platform that simplifies operations across multiple Kubernetes clusters. Whether you're managing clusters manually or provisioning them on AWS, Kubic provides a unified control plane to deploy applications, manage resources, and optimize costs.
 
 <Card
-  title="Start here"
+  title="Get Started"
   icon="rocket"
   href="/quickstart"
   horizontal
 >
-  Follow our three step quickstart guide.
+  Run Kubic locally with Docker Compose in minutes.
 </Card>
 
-## Make it yours
+## Key Features
 
-Design a docs site that looks great and empowers your users.
+<CardGroup cols={2}>
+  <Card
+    title="Multi-Cluster Management"
+    icon="server"
+  >
+    Manage multiple Kubernetes clusters from a single dashboard. Register existing clusters or provision new ones on AWS EC2 with K3s.
+  </Card>
 
-<Columns cols={2}>
   <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
+    title="Template-Driven Deployments"
+    icon="layer-group"
   >
-    Edit your docs locally and preview them in real time.
+    Deploy applications using pre-configured templates with dynamic wizards. Supports Helm charts and custom applications.
   </Card>
-  <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
-  >
-    Customize the design and colors of your site to match your brand.
-  </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
-  >
-    Organize your docs to help users find what they need and succeed with your product.
-  </Card>
-  <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
-  >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
 
-## Create beautiful pages
-
-Everything you need to create world-class documentation.
-
-<Columns cols={2}>
   <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
+    title="Automatic HTTPS"
+    icon="lock"
   >
-    Use MDX to style your docs pages.
+    Automatic SSL certificate management with Let's Encrypt integration. Supports custom domains and sslip.io for development.
   </Card>
+
   <Card
-    title="Code samples"
+    title="Cost Optimization"
+    icon="dollar-sign"
+  >
+    Stop and start AWS-managed clusters to save costs. Only pay for EBS storage when clusters are stopped.
+  </Card>
+
+  <Card
+    title="Resource Management"
+    icon="chart-bar"
+  >
+    Monitor and manage namespaces, nodes, storage, and application resources across all your clusters.
+  </Card>
+
+  <Card
+    title="Developer Experience"
     icon="code"
-    href="/essentials/code"
   >
-    Add sample code to demonstrate how to use your product.
+    Auto-generated TypeScript SDK, comprehensive Swagger documentation, and a modern Next.js dashboard.
   </Card>
-  <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
-  >
-    Display images and other media.
-  </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
+</CardGroup>
 
-## Need inspiration?
+## Architecture Overview
 
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+Kubic follows a clean architecture pattern with a control plane that manages multiple Kubernetes clusters:
+
+```
+┌──────────────────────────────────────────────────┐
+│  Kubic Control Plane                             │
+│                                                   │
+│  ┌────────────────┐        ┌──────────────────┐ │
+│  │  Next.js App   │◄──────►│  Go API (Gin)    │ │
+│  │  - Dashboard   │  REST  │  - Swagger docs  │ │
+│  │  - TypeScript  │        │  - Clean arch    │ │
+│  │  - shadcn/ui   │        │  - Services      │ │
+│  └────────────────┘        └────────┬─────────┘ │
+│                                     ↓            │
+│                            ┌──────────────────┐ │
+│                            │  PostgreSQL      │ │
+│                            │  - Clusters      │ │
+│                            │  - Applications  │ │
+│                            │  - Templates     │ │
+│                            └──────────────────┘ │
+└──────────────────────────────┬───────────────────┘
+                               ↓ (kubectl + kubeconfig)
+                    ┌──────────┴──────────┐
+                    ↓                     ↓
+            ┌───────────────┐     ┌───────────────┐
+            │ Manual Cluster│     │ AWS Managed   │
+            │ (Any K8s)     │     │ (EC2 + K3s)   │
+            │ - Register    │     │ - Provision   │
+            │   kubeconfig  │     │ - Stop/Start  │
+            │               │     │ - Auto HTTPS  │
+            └───────────────┘     └───────────────┘
+```
+
+## Use Cases
+
+- **Multi-Environment Management**: Manage development, staging, and production clusters from one place
+- **Rapid Application Deployment**: Deploy applications using templates without writing Helm charts manually
+- **Cost-Effective Development**: Provision temporary clusters on AWS and stop them when not in use
+- **Centralized Operations**: Monitor and manage resources across all your Kubernetes clusters
+- **Template Library**: Build and share application templates for your team
+
+## Tech Stack
+
+- **Backend**: Go + Gin + GORM + PostgreSQL
+- **Frontend**: Next.js 14 (App Router) + TypeScript + Tailwind + shadcn/ui
+- **Deployment**: Helm for application packaging
+- **Infrastructure**: AWS EC2 provisioning with Elastic IPs
+- **Ingress**: Traefik with automatic Let's Encrypt certificates
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Get Kubic running locally with Docker Compose
+  </Card>
+
+  <Card title="API Reference" icon="terminal" href="/api-reference/introduction">
+    Explore the REST API documentation
+  </Card>
+
+  <Card title="Development" icon="code" href="/development">
+    Learn how to contribute and develop locally
+  </Card>
+</CardGroup>
